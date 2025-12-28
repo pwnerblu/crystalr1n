@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "crystalr1n v1.0 (Linux)"
+echo "Make a restorable iPadOS 18.x IPSW for the iPad 6"
+echo
+# Request sudo password upfront
+echo "Enter your user password when prompted to"
+sudo -v || exit 1
+
+usage() {
+    echo "usage:"
+    echo "./crystalr1n [iPad 6 iPadOS 17.7.x IPSW] [iPad 7 iPadOS 18.x IPSW]"
+    exit 1
+}
+
+warning() {
+    echo "WARNING:"
+    echo "1. I (pwnerblu) am not responsible for any damages caused to your device."
+    echo "2. There are some caveats with this restore, this includes the following:"
+    echo "Touch screen will not work on 18.x. There is a fix for it by injecting iPad 6 specific files, but this will require a FakeFS to add these files and will waste storage."
+    echo "Restoring with the custom IPSW will be tethered. You will need to use turdus merula to restore the IPSW afterwards."
+    echo "You'll need sufficient storage available to proceed with making the custom IPSW."
+    read -p "Press any key to continue"
+}
+
+if [ "$#" -ne 2 ]; then
+    usage
+fi
+
+warning
+
+
+# extract
+ipad6_ipsw="$1"
+ipad7_ipsw="$2"
+version=$(basename "$ipad7_ipsw" | sed -n 's/.*iPad_10\.2_\([0-9.]\+\)_.*/\1/p')
+sudo rm -rf "17ipsw"
+sudo rm -rf "18ipsw"
+echo "Extracting iPad 6 iPadOS 17.7.x IPSW"
+unzip "$ipad6_ipsw" -d "17ipsw" >/dev/null
+echo "Extracting iPad 7 iPadOS 18.x IPSW"
+unzip "$ipad7_ipsw" -d "18ipsw" >/dev/null
+
+# replace iBSS, iBEC, LLB, iBoot, DeviceTree, AOP
+
+echo "Removing iPad 7 iBSS and iBEC"
+rm -rf "18ipsw/Firmware/dfu/iBSS.ipad7c.RELEASE.im4p"
+rm -rf "18ipsw/Firmware/dfu/iBEC.ipad7c.RELEASE.im4p"
+echo "Removing iPad 7 LLB and iBoot"
+rm -rf "18ipsw/Firmware/all_flash/LLB.ipad7c.RELEASE.im4p"
+rm -rf "18ipsw/Firmware/all_flash/iBoot.ipad7c.RELEASE.im4p"
+echo "Removing iPad 7 DeviceTree"
+rm -rf "18ipsw/Firmware/all_flash/DeviceTree.j171ap.im4p"
+rm -rf "18ipsw/Firmware/all_flash/DeviceTree.j172ap.im4p"
+echo "Removing iPad 7 AOP"
+rm -rf "18ipsw/Firmware/AOP/aopfw-ipad7caop.RELEASE.im4p"
+echo "Adding iPad 6 iBSS and iBEC"
+mv "17ipsw/Firmware/dfu/iBSS.ipad7b.RELEASE.im4p" "18ipsw/Firmware/dfu/iBSS.ipad7c.RELEASE.im4p"
+mv "17ipsw/Firmware/dfu/iBEC.ipad7b.RELEASE.im4p" "18ipsw/Firmware/dfu/iBEC.ipad7c.RELEASE.im4p"
+echo "Adding iPad 6 LLB and iBoot"
+mv "17ipsw/Firmware/all_flash/LLB.ipad7b.RELEASE.im4p" "18ipsw/Firmware/all_flash/LLB.ipad7c.RELEASE.im4p"
+mv "17ipsw/Firmware/all_flash/iBoot.ipad7b.RELEASE.im4p" "18ipsw/Firmware/all_flash/iBoot.ipad7c.RELEASE.im4p"
+echo "Adding iPad 6 DeviceTree"
+mv "17ipsw/Firmware/all_flash/DeviceTree.j71bap.im4p" "18ipsw/Firmware/all_flash/DeviceTree.j171ap.im4p"
+mv "17ipsw/Firmware/all_flash/DeviceTree.j72bap.im4p" "18ipsw/Firmware/all_flash/DeviceTree.j172ap.im4p"
+echo "Adding iPad 6 AOP"
+mv "17ipsw/Firmware/AOP/aopfw-ipad7baop.RELEASE.im4p" "18ipsw/Firmware/AOP/aopfw-ipad7caop.RELEASE.im4p"
+echo "Rewriting 18.x BuildManifest"
+sudo sed -i.bak 's/iPad7,11/iPad7,5/g' 18ipsw/BuildManifest.plist
+sudo sed -i.bak 's/iPad7,12/iPad7,6/g' 18ipsw/BuildManifest.plist
+sudo sed -i.bak '/<key>DeviceClass<\/key>/{n;s/<string>j171ap<\/string>/<string>j71bap<\/string>/}' 18ipsw/BuildManifest.plist
+sudo sed -i.bak '/<key>DeviceClass<\/key>/{n;s/<string>j172ap<\/string>/<string>j72bap<\/string>/}' 18ipsw/BuildManifest.plist
+sudo rm -f 18ipsw/BuildManifest.plist.bak
+echo "Finishing 18.x IPSW creation"
+sudo rm -rf "17ipsw"
+cd 18ipsw
+zip -0 -r ../iPad_6th_$version-Custom.ipsw * >/dev/null
+cd ..
+sudo rm -rf "18ipsw"
+echo "Finished! IPSW is saved as: iPad_6th_$version-Custom.ipsw"
